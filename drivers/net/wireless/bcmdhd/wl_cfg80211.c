@@ -123,6 +123,11 @@ u32 wl_dbg_level = WL_DBG_ERR;
 
 #define MAX_WAIT_TIME 1500
 
+/* No scans while joining, but never for longer than this, in case the
+ * firmware reports neither success nor failure of the join */
+#define WL_CONNECT_SCAN_BLOCK	(10 * HZ)
+static unsigned long wl_connect_start;
+
 #ifdef VSDB
 /* sleep time to keep STA's connecting or connection for continuous af tx or finding a peer */
 #define DEFAULT_SLEEP_TIME_VSDB		120
@@ -2507,6 +2512,18 @@ __wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 		WL_ERR(("Scanning being aborted\n"));
 		return -EAGAIN;
 	}
+	/*
+	 * A scan started while the firmware is still joining moves the radio off
+	 * the AP's channel and can kill the join: no auth/assoc event follows,
+	 * the supplicant times out, and some APs then ignore the station for a
+	 * while (the network "disappears" from scans). Newer bcmdhd releases
+	 * refuse scans while connecting; the framework retries later.
+	 */
+	if (wl_get_drv_status(cfg, CONNECTING, ndev) &&
+		time_before(jiffies, wl_connect_start + WL_CONNECT_SCAN_BLOCK)) {
+		WL_ERR(("Connecting: scan is not allowed\n"));
+		return -EBUSY;
+	}
 	if (request && request->n_ssids > WL_SCAN_PARAMS_SSID_MAX) {
 		WL_ERR(("request null or n_ssids > WL_SCAN_PARAMS_SSID_MAX\n"));
 		return -EOPNOTSUPP;
@@ -4044,6 +4061,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 			ext_join_params->ssid.SSID_len));
 	}
 	wl_set_drv_status(cfg, CONNECTING, dev);
+	wl_connect_start = jiffies;
 
 	if (wl_cfgp2p_find_idx(cfg, dev, &bssidx) != BCME_OK) {
 		WL_ERR(("Find p2p index from dev(%p) failed\n", dev));
@@ -4091,6 +4109,7 @@ set_ssid:
 			join_params.ssid.SSID_len));
 	}
 	wl_set_drv_status(cfg, CONNECTING, dev);
+	wl_connect_start = jiffies;
 	err = wldev_ioctl(dev, WLC_SET_SSID, &join_params, join_params_size, true);
 	if (err) {
 		WL_ERR(("error (%d)\n", err));
