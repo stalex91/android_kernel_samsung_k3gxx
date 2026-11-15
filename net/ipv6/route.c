@@ -780,6 +780,7 @@ struct rt6_info *rt6_lookup(struct net *net, const struct in6_addr *daddr,
 {
 	struct flowi6 fl6 = {
 		.flowi6_oif = oif,
+		.flowi6_iif = LOOPBACK_IFINDEX,
 		.daddr = *daddr,
 	};
 	struct dst_entry *dst;
