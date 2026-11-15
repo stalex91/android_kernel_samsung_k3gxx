@@ -32,6 +32,8 @@ enum {
 	Opt_multiuser,
 	Opt_userid,
 	Opt_reserved_mb,
+	Opt_derive_gid,
+	Opt_default_normal,
 	Opt_err,
 };
 
@@ -44,6 +46,8 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_userid, "userid=%d"},
 	{Opt_multiuser, "multiuser"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
+	{Opt_derive_gid, "derive_gid"},
+	{Opt_default_normal, "default_normal"},
 	{Opt_err, NULL}
 };
 
@@ -114,6 +118,13 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			if (match_int(&args[0], &option))
 				return 0;
 			opts->reserved_mb = option;
+			break;
+		case Opt_derive_gid:
+		case Opt_default_normal:
+			/*
+			 * Passed by Pie's sdcard daemon. This driver predates
+			 * them: keep its behaviour and accept the options.
+			 */
 			break;
 		/* unknown option */
 		default:
