@@ -755,6 +755,7 @@ static ssize_t ffs_epfile_io(struct file *file,
 	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
 	char *data = NULL;
+	size_t data_len = len;
 	ssize_t ret;
 	int halt;
 
@@ -794,7 +795,14 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = kzalloc(len, GFP_KERNEL);
+			/*
+			 * dwc3 needs OUT requests sized in whole packets: a
+			 * shorter one never completes. adbd reads 24 byte
+			 * message headers, so round reads up.
+			 */
+			if (read && ep->ep)
+				data_len = ALIGN(len, ep->ep->maxpacket);
+			data = kzalloc(data_len, GFP_KERNEL);
 			if (unlikely(!data))
 				return -ENOMEM;
 
@@ -837,7 +845,7 @@ first_try:
 		req->context  = &done;
 		req->complete = ffs_epfile_io_complete;
 		req->buf      = data;
-		req->length   = len;
+		req->length   = data_len;
 
 		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 
@@ -850,9 +858,11 @@ first_try:
 			usb_ep_dequeue(ep->ep, req);
 		} else {
 			ret = ep->status;
-			if (read && ret > 0 &&
-			    unlikely(copy_to_user(buf, data, ret)))
-				ret = -EFAULT;
+			if (read && ret > 0) {
+				ret = min_t(size_t, ret, len);
+				if (unlikely(copy_to_user(buf, data, ret)))
+					ret = -EFAULT;
+			}
 		}
 	}
 
