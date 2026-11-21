@@ -264,7 +264,12 @@ static const char * const fw_path[] = {
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
-	"/lib/firmware"
+	"/lib/firmware",
+	/* Android keeps firmware here; without these paths every request,
+	 * including the firmware cache before each suspend, went through
+	 * ueventd, and its uevents aborted the freeze of every suspend. */
+	"/vendor/firmware",
+	"/system/etc/firmware"
 };
 
 /*
